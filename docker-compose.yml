@@ -1,0 +1,82 @@
+version: '3.8'
+
+services:
+  nginx:
+    build: ./nginx
+    container_name: nginx
+    links:
+      - consul
+    ports:
+      - "80:80"
+    labels:
+      SERVICE_IGNORE: 'yes'
+    networks:
+      moi-network:
+        aliases:
+        - gateway
+  consul:
+    image: consul:latest
+    container_name: consul
+    restart: on-failure
+    ports:
+      - "8500:8500"
+    labels:
+      SERVICE_IGNORE: 'yes'  
+    networks:
+      moi-network:
+        aliases:
+        - consul
+  consul-registrator:
+    image: gliderlabs/registrator
+    container_name: registrator
+    command: "-internal consul://consul:8500"
+    links:
+      - consul
+    volumes:
+      - /var/run/docker.sock:/tmp/docker.sock
+    depends_on:
+      - consul
+    networks:
+      moi-network:
+        aliases:
+        - registrator    
+  keycloak:
+     build: .
+     restart: on-failure
+     container_name: keycloak
+     links:
+      - consul
+     ports:
+      - "8080:8080" 
+     environment:
+       - KEYCLOAK_USER=admin
+       - KEYCLOAK_PASSWORD=password
+       - DB_VENDOR=postgres
+       - DB_USER=admin
+       - DB_PASSWORD=password
+       - DB_ADDR=keycloak-db
+       - DB_PORT=5432
+       - DB_DATABASE=keycloakdb
+       - PROXY_ADDRESS_FORWARDING=true
+     depends_on:
+       - keycloak-db
+     networks:
+      moi-network:
+        aliases:
+          - keycloak
+  keycloak-db:
+    image: postgres:12.4-alpine
+    container_name: keycloak-postgredb
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: keycloakdb
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      moi-network:
+
+networks:
+  moi-network:
+volumes:
+  pgdata:
